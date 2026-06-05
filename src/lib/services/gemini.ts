@@ -1,32 +1,33 @@
 import type { Question, PerformanceStats } from '../types';
 
 /**
- * Gemini AI Service
- * Handles AI-powered question extraction, tutoring, and flashcard generation.
+ * AI Service (opcional) + Parser Heurístico Local (principal)
+ * O parser local é a abordagem primária. A IA é usada apenas se uma chave for fornecida.
  */
 
-// Call the Gemini API directly from the browser
+// ---------------------------------------------------------------------------
+// Tipos auxiliares
+// ---------------------------------------------------------------------------
+
+interface Alternative {
+	text: string;
+	isCorrect: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Chamada opcional à API do Gemini (somente se apiKey fornecida)
+// ---------------------------------------------------------------------------
+
 async function callGemini(prompt: string, apiKey: string, jsonMode = false): Promise<string> {
-	// We can use gemini-2.5-flash or gemini-2.0-flash
 	const model = 'gemini-1.5-flash';
 	const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
 	const response = await fetch(url, {
 		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json'
-		},
+		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({
-			contents: [
-				{
-					parts: [
-						{ text: prompt }
-					]
-				}
-			],
-			generationConfig: jsonMode ? {
-				responseMimeType: 'application/json'
-			} : undefined
+			contents: [{ parts: [{ text: prompt }] }],
+			generationConfig: jsonMode ? { responseMimeType: 'application/json' } : undefined
 		})
 	});
 
@@ -39,182 +40,339 @@ async function callGemini(prompt: string, apiKey: string, jsonMode = false): Pro
 	return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
+// ---------------------------------------------------------------------------
+// Utilitários do parser local
+// ---------------------------------------------------------------------------
+
+/** Detecta gabarito explícito no bloco: "Gabarito: C", "Resp: B", "Resposta: A" */
+function detectCorrectFromGabarito(block: string): string | null {
+	const match = block.match(/(?:[Gg]abarito|[Rr]esp(?:osta)?)\s*[:\-]?\s*([A-Ea-e])\b/);
+	return match ? match[1].toUpperCase() : null;
+}
+
+/** Infere disciplina e tópico por palavras-chave */
+function inferSubjectAndTopic(text: string): { subject: string; topic: string } {
+	const t = text.toLowerCase();
+
+	const rules: Array<{ keywords: string[]; subject: string; topic: string }> = [
+		{ keywords: ['sistema', 'gauss', 'matriz', 'determinante', 'equação', 'linear', 'vetor', 'autovalor', 'polinômio', 'derivada', 'integral', 'limite', 'função', 'logaritmo', 'trigonometria', 'probabilidade', 'estatística', 'porcentagem', 'fração', 'mmc', 'mdc'], subject: 'Matemática', topic: 'Álgebra e Cálculo' },
+		{ keywords: ['ip', 'tcp', 'udp', 'porta', 'http', 'dns', 'protocolo', 'roteamento', 'subnet', 'ospf', 'bgp', 'camada', 'rede'], subject: 'Redes de Computadores', topic: 'Protocolos e Camadas' },
+		{ keywords: ['criptografia', 'chave pública', 'chave privada', 'hash', 'ssl', 'tls', 'certificado', 'rsa', 'aes', 'ataque', 'firewall', 'vulnerabilidade'], subject: 'Segurança da Informação', topic: 'Criptografia e Ataques' },
+		{ keywords: ['sql', 'select', 'tabela', 'banco de dados', 'acid', 'normalização', 'índice', 'trigger', 'stored', 'nosql', 'relacional', 'join'], subject: 'Banco de Dados', topic: 'Modelagem e SQL' },
+		{ keywords: ['algoritmo', 'complexidade', 'ordenação', 'busca', 'pilha', 'fila', 'árvore', 'grafo', 'recursão', 'big o', 'lista encadeada'], subject: 'Estruturas de Dados', topic: 'Algoritmos' },
+		{ keywords: ['processo', 'thread', 'semáforo', 'deadlock', 'escalonamento', 'sistema operacional', 'memória virtual', 'paginação'], subject: 'Sistemas Operacionais', topic: 'Processos e Memória' },
+		{ keywords: ['objeto', 'classe', 'herança', 'polimorfismo', 'encapsulamento', 'interface', 'java', 'python', 'orientação a objetos'], subject: 'Programação', topic: 'Orientação a Objetos' },
+		{ keywords: ['constituição', 'artigo', 'lei', 'decreto', 'direito', 'jurídico', 'código civil', 'penal', 'administrativo'], subject: 'Direito', topic: 'Legislação' },
+		{ keywords: ['sujeito', 'predicado', 'verbo', 'concordância', 'regência', 'crase', 'ortografia', 'pontuação', 'sintaxe', 'morfologia', 'interpretação'], subject: 'Língua Portuguesa', topic: 'Gramática e Interpretação' },
+		{ keywords: ['administração', 'gestão', 'planejamento', 'controle', 'organização', 'liderança', 'motivação', 'burocracia'], subject: 'Administração', topic: 'Gestão Organizacional' },
+		{ keywords: ['economia', 'inflação', 'pib', 'juros', 'fiscal', 'tributário', 'imposto', 'orçamento', 'receita', 'despesa'], subject: 'Economia e Finanças', topic: 'Macroeconomia' },
+	];
+
+	for (const rule of rules) {
+		if (rule.keywords.some(kw => t.includes(kw))) {
+			return { subject: rule.subject, topic: rule.topic };
+		}
+	}
+
+	return { subject: 'Conhecimentos Gerais', topic: 'Outros' };
+}
+
+/** Estima dificuldade com base no tamanho do enunciado */
+function estimateDifficulty(statement: string, alternatives: Alternative[]): 'Fácil' | 'Média' | 'Difícil' {
+	const wordCount = statement.split(/\s+/).length;
+	const avgAltLength = alternatives.reduce((sum, a) => sum + a.text.length, 0) / (alternatives.length || 1);
+	if (wordCount > 80 || avgAltLength > 80) return 'Difícil';
+	if (wordCount > 35 || avgAltLength > 40) return 'Média';
+	return 'Fácil';
+}
+
+/** Remove ruídos de numeração, cabeçalho e rodapé do enunciado */
+function cleanStatement(raw: string): string {
+	return raw
+		.replace(/^QUEST[ÃA]O\s*\d+\s*[\-–]?\s*/i, '')
+		.replace(/^Q\.?\s*\d+[\.\-\)]\s*/i, '')
+		.replace(/^\d{1,3}\s*[\.\-\)]\s*/, '')
+		.replace(/\(gabarito[\s:]*[A-Ea-e]\)/gi, '')
+		.replace(/página\s*\d+/gi, '')
+		.replace(/©.*/g, '')
+		.replace(/\s{2,}/g, ' ')
+		.trim();
+}
+
+// ---------------------------------------------------------------------------
+// Expansão de alternativas em linha única
+// ---------------------------------------------------------------------------
+
+/**
+ * Alguns PDFs colocam todas as alternativas na mesma linha:
+ * "A) texto  B) texto  C) texto  D) texto  E) texto"
+ *
+ * Esta função detecta esse padrão e expande para múltiplas linhas.
+ */
+function expandInlineAlternatives(line: string): string[] {
+	// Detecta se a linha contém pelo menos 2 marcadores de alternativa
+	const inlineAltRegex = /([A-Ea-e])\s*[\)\.\-]\s*/g;
+	const markers = [...line.matchAll(inlineAltRegex)];
+	if (markers.length < 2) return [line];
+
+	// Divide a linha nos marcadores
+	const parts: string[] = [];
+	for (let i = 0; i < markers.length; i++) {
+		const start = markers[i].index!;
+		const end = i + 1 < markers.length ? markers[i + 1].index! : line.length;
+		parts.push(line.slice(start, end).trim());
+	}
+	return parts;
+}
+
+// ---------------------------------------------------------------------------
+// Parser heurístico principal (sem IA)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extrai questões de múltipla escolha de texto puro sem nenhuma IA.
+ *
+ * Formatos suportados:
+ *  - "QUESTÃO 01 – enunciado\nA) alt\nB) alt..."
+ *  - "1. enunciado\na) alt\nb) alt..."
+ *  - Alternativas na mesma linha: "A) texto  B) texto  C) texto"
+ *  - Enunciado em múltiplas linhas (ex: sistemas de equações)
+ *  - Gabarito explícito: "Gabarito: C"
+ */
+function heuristicParser(text: string): Partial<Question>[] {
+	const questions: Partial<Question>[] = [];
+
+	// ────────────────────────────────────────────────────────────
+	// 1. Normalização
+	// ────────────────────────────────────────────────────────────
+	const normalized = text
+		.replace(/\r\n/g, '\n')
+		.replace(/\r/g, '\n')
+		.replace(/\u00A0/g, ' ')
+		.replace(/\u2013|\u2014/g, '-')
+		.replace(/[ \t]+/g, ' ')
+		.replace(/\n{3,}/g, '\n\n');
+
+	console.group('[Parser Heurístico]');
+	console.log('Caracteres:', normalized.length);
+	console.log(
+		'Questões encontradas:',
+		normalized.match(/QUEST[ÃA]O\s+\d+/gi)?.length ?? 0
+	);
+	console.groupEnd();
+
+	// ────────────────────────────────────────────────────────────
+	// 2. Divide por QUESTÃO XX
+	// ────────────────────────────────────────────────────────────
+	let blocks =
+		normalized.match(
+			/QUEST[ÃA]O\s+\d+[\s\S]*?(?=QUEST[ÃA]O\s+\d+|$)/gi
+		) || [];
+
+	console.log('[Parser] Blocos:', blocks.length);
+
+	// fallback
+	if (blocks.length === 0) {
+		blocks = normalized
+			.split(/\n{2,}/)
+			.map((b) => b.trim())
+			.filter((b) => b.length > 50);
+	}
+
+	// ────────────────────────────────────────────────────────────
+	// 3. Processa cada questão
+	// ────────────────────────────────────────────────────────────
+	for (const block of blocks) {
+		try {
+			// Remove cabeçalho da questão
+			const content = block.replace(
+				/^QUEST[ÃA]O\s+\d+\s*[-–.]?\s*/i,
+				''
+			);
+
+			// Captura alternativas diretamente do bloco
+			const altRegex =
+				/([A-E])\)\s*([\s\S]*?)(?=(?:\s+[A-E]\))|$)/gi;
+
+			const alternatives: Alternative[] = [];
+
+			let match: RegExpExecArray | null;
+
+			while ((match = altRegex.exec(content)) !== null) {
+				const text = match[2]
+					.replace(/\s+/g, ' ')
+					.trim();
+
+				if (text.length > 0) {
+					alternatives.push({
+						text,
+						isCorrect: false
+					});
+				}
+			}
+
+			// POSCOMP deve ter 5 alternativas
+			if (alternatives.length < 4) {
+				console.warn(
+					'Questão descartada - alternativas insuficientes:',
+					alternatives.length
+				);
+
+				continue;
+			}
+
+			// Enunciado = tudo antes da primeira alternativa
+			const firstAltIndex = content.search(/\bA\)/i);
+
+			if (firstAltIndex < 0) {
+				continue;
+			}
+
+			const statement = cleanStatement(
+				content.substring(0, firstAltIndex).trim()
+			);
+
+			if (statement.length < 10) {
+				continue;
+			}
+
+			// Gabarito
+			const gabaritoLetter =
+				detectCorrectFromGabarito(block);
+
+			const letters = ['A', 'B', 'C', 'D', 'E'];
+
+			if (gabaritoLetter) {
+				const idx = letters.indexOf(gabaritoLetter);
+
+				if (
+					idx >= 0 &&
+					idx < alternatives.length
+				) {
+					alternatives[idx].isCorrect = true;
+				}
+			} else {
+				alternatives[0].isCorrect = true;
+			}
+
+			const fullText =
+				statement +
+				' ' +
+				alternatives.map((a) => a.text).join(' ');
+
+			const { subject, topic } =
+				inferSubjectAndTopic(fullText);
+
+			const difficulty =
+				estimateDifficulty(
+					statement,
+					alternatives
+				);
+
+			questions.push({
+				statement,
+				alternatives,
+				difficulty,
+				subject,
+				topic,
+				explanation: gabaritoLetter
+					? `Gabarito identificado automaticamente: ${gabaritoLetter}`
+					: 'Gabarito não encontrado.'
+			});
+		} catch (err) {
+			console.error(
+				'Erro ao processar bloco:',
+				err
+			);
+		}
+	}
+
+	console.log(
+		'[Parser] Questões extraídas:',
+		questions.length
+	);
+
+	return questions;
+}
+
+// ---------------------------------------------------------------------------
+// Serviço público exportado
+// ---------------------------------------------------------------------------
+
 export const gemini = {
 	/**
-	 * Parse questions from PDF extracted text
+	 * Extrai questões do texto do PDF.
+	 * Usa o parser heurístico local por padrão (offline, sem custo).
+	 * Se uma apiKey for fornecida, usa o Gemini para enriquecer o resultado.
 	 */
-	async parseQuestionsFromText(text: string, apiKey: string): Promise<Partial<Question>[]> {
+	async parseQuestionsFromText(text: string, apiKey?: string): Promise<Partial<Question>[]> {
 		if (!apiKey) {
-			return this.fallbackHeuristicParser(text);
+			return heuristicParser(text);
 		}
 
-		const prompt = `Analise o texto a seguir extraído de um PDF de prova ou simulado e extraia as questões de múltipla escolha que encontrar.
-Retorne o resultado ESTRITAMENTE como um objeto JSON contendo um array "questions" no seguinte formato de esquema:
+		const prompt = `Analise o texto extraído de um PDF de prova e extraia as questões de múltipla escolha.
+Retorne SOMENTE JSON válido (sem markdown) com este esquema:
 {
   "questions": [
     {
-      "statement": "Enunciado completo da questão, sem incluir as letras das alternativas aqui.",
-      "alternatives": [
-        { "text": "Texto da alternativa A", "isCorrect": false },
-        { "text": "Texto da alternativa B", "isCorrect": false },
-        { "text": "Texto da alternativa C", "isCorrect": true },
-        { "text": "Texto da alternativa D", "isCorrect": false }
-      ],
-      "difficulty": "Fácil" | "Média" | "Difícil",
-      "subject": "Disciplina principal (ex: Redes de Computadores, Segurança da Informação, Banco de Dados, Português, Matemática)",
-      "topic": "Assunto específico da disciplina (ex: Protocolo TCP, Criptografia Assimétrica, Normalização SQL)",
-      "explanation": "Explicação pedagógica detalhada explicando por que a alternativa marcada como 'isCorrect: true' está certa e por que as demais estão erradas."
+      "statement": "Enunciado completo",
+      "alternatives": [{ "text": "Texto", "isCorrect": false }],
+      "difficulty": "Fácil",
+      "subject": "Disciplina",
+      "topic": "Assunto específico",
+      "explanation": "Explicação pedagógica de por que a correta está certa."
     }
   ]
 }
 
-Regras importantes:
-1. Extraia o máximo de questões completas possíveis.
-2. Certifique-se de que cada questão tenha exatamente uma alternativa marcada como 'isCorrect: true'.
-3. Identifique com precisão qual alternativa é a correta no contexto do texto.
-4. Mantenha os textos originais, limpando apenas ruídos de cabeçalho ou numeração de rodapé se necessário.
-
-Texto extraído do PDF:
+Texto:
 ${text}`;
 
 		try {
 			const jsonText = await callGemini(prompt, apiKey, true);
 			const parsed = JSON.parse(jsonText);
-			return parsed.questions || [];
-		} catch (error) {
-			console.error('Erro ao parser com Gemini, executando fallback heurístico:', error);
-			return this.fallbackHeuristicParser(text);
+			if (parsed.questions?.length > 0) return parsed.questions;
+			return heuristicParser(text);
+		} catch {
+			return heuristicParser(text);
 		}
 	},
 
-	/**
-	 * Local fallback heuristic parser when API key is missing or calls fail
-	 */
-	fallbackHeuristicParser(text: string): Partial<Question>[] {
-		console.log('Executando parser heurístico local...');
-		const questions: Partial<Question>[] = [];
-		
-		// Simple split on Question/Questão indicators
-		const questionBlocks = text.split(/(?=Questão\s+\d+|Q\d+|Question\s+\d+|^\d+[\.\-\)]\s+Qual|^\d+[\.\-\)]\s+O\s+que)/im);
-		
-		questionBlocks.forEach((block, idx) => {
-			if (block.trim().length < 50) return; // Skip short blocks
-			
-			// Try to extract lines
-			const lines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-			if (lines.length < 3) return;
+	/** Alias mantido para compatibilidade */
+	fallbackHeuristicParser: heuristicParser,
 
-			// Check for alternatives (A, B, C, D, E or a, b, c, d, e)
-			const altRegex = /^([A-Ea-e])[\)\.\-\s]\s*(.+)$/;
-			const statementLines: string[] = [];
-			const alternatives: { text: string; isCorrect: boolean }[] = [];
+	// -------------------------------------------------------------------------
+	// Tutor (requer apiKey; modo local retorna feedback básico)
+	// -------------------------------------------------------------------------
 
-			lines.forEach(line => {
-				const match = line.match(altRegex);
-				if (match) {
-					alternatives.push({
-						text: match[2].trim(),
-						isCorrect: false
-					});
-				} else {
-					// Only add to statement if we haven't found alternatives yet
-					if (alternatives.length === 0) {
-						statementLines.push(line);
-					}
-				}
-			});
-
-			if (alternatives.length >= 2) {
-				// Mark the first one as correct by default for mock purposes
-				alternatives[0].isCorrect = true;
-
-				// Try to clean statement
-				const rawStatement = statementLines.join('\n');
-				const cleanStatement = rawStatement.replace(/^(Questão\s+\d+|Q\d+|^\d+[\.\-\)]\s*)/i, '').trim();
-
-				// Guess subject/topic based on key words
-				let subject = 'Geral';
-				let topic = 'Outros';
-				const statementLower = cleanStatement.toLowerCase();
-
-				if (statementLower.includes('ip') || statementLower.includes('porta') || statementLower.includes('protocolo') || statementLower.includes('redes') || statementLower.includes('http')) {
-					subject = 'Redes de Computadores';
-					topic = 'Protocolos';
-				} else if (statementLower.includes('cripto') || statementLower.includes('chave') || statementLower.includes('segurança') || statementLower.includes('ataque') || statementLower.includes('hash')) {
-					subject = 'Segurança da Informação';
-					topic = 'Criptografia';
-				} else if (statementLower.includes('sql') || statementLower.includes('tabela') || statementLower.includes('banco') || statementLower.includes('acid') || statementLower.includes('database')) {
-					subject = 'Banco de Dados';
-					topic = 'Modelagem Relacional';
-				}
-
-				questions.push({
-					statement: cleanStatement || 'Questão sem enunciado extraível',
-					alternatives,
-					difficulty: Math.random() > 0.6 ? 'Média' : 'Fácil',
-					subject,
-					topic,
-					explanation: 'Questão importada via parser heurístico local. Ative sua Chave do Gemini nas Configurações para obter explicações didáticas completas geradas por Inteligência Artificial.'
-				});
-			}
-		});
-
-		// If no questions were parsed, generate at least one mock question so it is not empty
-		if (questions.length === 0) {
-			questions.push({
-				statement: "Não foi possível estruturar automaticamente as questões deste PDF usando a heurística local. Por favor, adicione sua Chave de API do Gemini para realizar o parse inteligente ou insira a questão manualmente.",
-				alternatives: [
-					{ text: "Entendido (Opção Correta)", isCorrect: true },
-					{ text: "Tentar Novamente", isCorrect: false }
-				],
-				difficulty: "Fácil",
-				subject: "Configurações",
-				topic: "Importação",
-				explanation: "Insira uma chave API do Gemini para obter extrações de alta qualidade de qualquer PDF de concurso."
-			});
-		}
-
-		return questions;
-	},
-
-	/**
-	 * Ask AI Tutor about a specific question that the user solved
-	 */
 	async askTutorAboutQuestion(
 		question: Question,
 		chosenAlternativeText: string,
 		isCorrect: boolean,
-		apiKey: string
+		apiKey?: string
 	): Promise<string> {
 		if (!apiKey) {
-			return `**Tutor StudyMock (Modo Local):**
-Você respondeu esta questão e o sistema marcou como **${isCorrect ? 'CORRETA' : 'INCORRETA'}**.
-Sua resposta: *"${chosenAlternativeText}"*.
+			return `**Tutor StudyMock:**
+Você respondeu esta questão como **${isCorrect ? 'CORRETA ✅' : 'INCORRETA ❌'}**.
+Sua resposta: *"${chosenAlternativeText}"*
 
-*Dica de Estudo:* Esta questão pertence ao assunto **${question.subject} -> ${question.topic}**.
-Para obter explicações detalhadas em tempo real e tirar dúvidas interativas com a IA, por favor configure sua **Chave de API do Gemini** na aba de Configurações!`;
+📚 Esta questão pertence a **${question.subject} → ${question.topic}**.
+${question.explanation ? `\n**Explicação cadastrada:**\n${question.explanation}` : ''}
+
+_Para explicações detalhadas com IA, configure sua chave do Gemini nas Configurações._`;
 		}
 
-		const prompt = `Você é o Tutor StudyMock, um assistente virtual especialista em ajudar estudantes a passarem em concursos e exames.
-O estudante acabou de responder a seguinte questão:
-Disciplina: ${question.subject}
-Assunto: ${question.topic}
-Dificuldade: ${question.difficulty}
+		const prompt = `Você é o Tutor StudyMock, especialista em concursos.
+Questão respondida:
+Disciplina: ${question.subject} | Assunto: ${question.topic} | Dificuldade: ${question.difficulty}
 Enunciado: ${question.statement}
 Alternativas:
-${question.alternatives.map(a => `- ${a.text} ${a.isCorrect ? '(CORRETA)' : ''}`).join('\n')}
+${question.alternatives.map((a, i) => `${['A','B','C','D','E'][i]}) ${a.text}${a.isCorrect ? ' ✓' : ''}`).join('\n')}
 
-O estudante respondeu: "${chosenAlternativeText}"
-O resultado do estudante foi: ${isCorrect ? 'ACERTO' : 'ERRO'}
+Resposta do estudante: "${chosenAlternativeText}" — ${isCorrect ? 'ACERTO' : 'ERRO'}
+Explicação padrão: ${question.explanation || 'Não cadastrada.'}
 
-Explicação padrão da questão: ${question.explanation || 'Não cadastrada.'}
-
-Instruções:
-1. Responda de forma motivadora, direta e didática.
-2. Explique com calma os conceitos envolvidos (ex: se for sobre redes, fale sobre portas, camadas, etc.).
-3. Se o aluno errou, aponte exatamente o provável motivo da confusão e como diferenciar as alternativas.
-4. Se o aluno acertou, dê um breve reforço conceitual para fixar.
-5. Escreva sua resposta em formato Markdown legível.`;
+Responda de forma motivadora e didática em Markdown.`;
 
 		try {
 			return await callGemini(prompt, apiKey);
@@ -223,45 +381,32 @@ Instruções:
 		}
 	},
 
-	/**
-	 * General Tutor conversation and analysis of weak spots
-	 */
-	async getGeneralTutorAdvice(stats: PerformanceStats, userMessage: string, apiKey: string): Promise<string> {
+	async getGeneralTutorAdvice(stats: PerformanceStats, userMessage: string, apiKey?: string): Promise<string> {
+		const weakSubjects = Object.entries(stats.bySubject)
+			.filter(([_, d]) => d.rate < 70)
+			.map(([name, d]) => `${name} (${d.rate}% de acerto)`);
+
 		if (!apiKey) {
-			// Find weak spots in stats
-			const weakSubjects = Object.entries(stats.bySubject)
-				.filter(([_, data]) => data.rate < 70)
-				.map(([name, data]) => `${name} (${data.rate}% de acerto)`);
+			return `**Tutor StudyMock:**
+Você respondeu **${stats.totalAnswered} questões** com **${stats.accuracyRate}% de precisão**.
 
-			return `**Tutor StudyMock (Modo Local):**
-Identifiquei que você respondeu um total de **${stats.totalAnswered} questões** com **${stats.accuracyRate}% de precisão**.
+${weakSubjects.length > 0
+	? `⚠️ Pontos de atenção:\n${weakSubjects.map(s => `- ${s}`).join('\n')}\nRecomendo focar nos flashcards desses temas!`
+	: '✅ Suas taxas estão sólidas! Continue praticando simulados.'}
 
-${weakSubjects.length > 0 
-	? `Seus principais pontos de atenção são:\n${weakSubjects.map(s => `- ${s}`).join('\n')}\nRecomendo focar nos flashcards desses temas!` 
-	: 'Parabéns! Suas taxas de acerto estão sólidas em todos os assuntos cadastrados. Continue praticando simulados.'}
-
-*Para ter uma conversa dinâmica, tirar dúvidas e criar trilhas personalizadas de estudo com IA, insira sua chave API do Gemini nas Configurações.*`;
+_Para análise personalizada com IA, configure sua chave do Gemini nas Configurações._`;
 		}
 
-		const weakSubjects = Object.entries(stats.bySubject)
-			.map(([name, data]) => `- ${name}: ${data.total} questões feitas, ${data.rate}% de precisão`)
+		const subjectStats = Object.entries(stats.bySubject)
+			.map(([name, d]) => `- ${name}: ${d.total} questões, ${d.rate}% de acerto`)
 			.join('\n');
 
-		const prompt = `Você é o Tutor StudyMock, um mentor de IA altamente qualificado para preparação de estudantes para concursos públicos e exames acadêmicos.
-Aqui estão as estatísticas atuais de desempenho do estudante:
-- Total de questões respondidas: ${stats.totalAnswered}
-- Total de acertos: ${stats.totalCorrect}
-- Taxa geral de acertos: ${stats.accuracyRate}%
-- Tempo médio por questão: ${stats.averageTime} segundos
-- Desempenho por disciplina:
-${weakSubjects || 'Nenhuma questão respondida ainda.'}
+		const prompt = `Você é o Tutor StudyMock, mentor para concursos públicos.
+Estatísticas: total=${stats.totalAnswered}, acertos=${stats.totalCorrect}, taxa=${stats.accuracyRate}%, tempo médio=${stats.averageTime}s
+Por disciplina:\n${subjectStats || 'Nenhuma questão respondida ainda.'}
 
-Mensagem atual do estudante: "${userMessage}"
-
-Sua tarefa:
-1. Responda à dúvida ou comando do estudante.
-2. Dê conselhos acionáveis baseados no desempenho dele (ex: se ele está com taxa baixa em Redes, recomende um cronograma ou tópicos específicos como portas ou protocolos).
-3. Seja amigável, focado na produtividade e utilize recursos de formatação Markdown para deixar o texto bem estruturado.`;
+Mensagem do estudante: "${userMessage}"
+Responda com conselhos acionáveis em Markdown.`;
 
 		try {
 			return await callGemini(prompt, apiKey);
@@ -270,53 +415,63 @@ Sua tarefa:
 		}
 	},
 
-	/**
-	 * Automatically generate Flashcards from study notes
-	 */
-	async generateFlashcardsFromNote(noteContent: string, apiKey: string): Promise<Array<{ front: string; back: string }>> {
+	async generateFlashcardsFromNote(noteContent: string, apiKey?: string): Promise<Array<{ front: string; back: string }>> {
 		if (!apiKey) {
-			// Return a simple split heuristic for local testing
-			const lines = noteContent.split('\n').filter(l => l.includes(':') || l.includes('='));
-			if (lines.length > 0) {
-				return lines.map(line => {
-					const parts = line.split(/[:=]/);
-					return {
-						front: `O que significa: ${parts[0].trim()}?`,
-						back: parts.slice(1).join('=').trim()
-					};
-				});
-			}
-			return [
-				{
-					front: "Conceito chave do texto da nota",
-					back: "Explicação resumida do conceito (insira a chave do Gemini para gerar flashcards inteligentes automaticamente de qualquer anotação)"
-				}
-			];
+			return localFlashcardGenerator(noteContent);
 		}
 
-		const prompt = `Analise a anotação de estudos a seguir e gere até 5 flashcards no formato pergunta-resposta (frente-verso).
-Retorne o resultado ESTRITAMENTE como um objeto JSON contendo um array "flashcards" no seguinte formato de esquema:
-{
-  "flashcards": [
-    {
-      "front": "Pergunta objetiva e direta para a frente do cartão.",
-      "back": "Resposta curta e precisa para o verso do cartão."
-    }
-  ]
-}
+		const prompt = `Gere até 5 flashcards pergunta-resposta desta anotação.
+Retorne SOMENTE JSON válido:
+{ "flashcards": [{ "front": "Pergunta.", "back": "Resposta concisa." }] }
 
-Anotação de estudos:
+Anotação:
 ${noteContent}`;
 
 		try {
 			const jsonText = await callGemini(prompt, apiKey, true);
 			const parsed = JSON.parse(jsonText);
-			return parsed.flashcards || [];
-		} catch (error) {
-			console.error('Erro ao gerar flashcards com Gemini:', error);
-			return [
-				{ front: "Nota de estudo", back: noteContent.substring(0, 100) + '...' }
-			];
+			if (parsed.flashcards?.length > 0) return parsed.flashcards;
+			return localFlashcardGenerator(noteContent);
+		} catch {
+			return localFlashcardGenerator(noteContent);
 		}
 	}
 };
+
+// ---------------------------------------------------------------------------
+// Gerador local de flashcards (sem IA)
+// ---------------------------------------------------------------------------
+
+function localFlashcardGenerator(note: string): Array<{ front: string; back: string }> {
+	const flashcards: Array<{ front: string; back: string }> = [];
+	const lines = note.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+
+	for (const line of lines) {
+		const defMatch = line.match(/^(.{3,60}?)\s*[:=]\s*(.{5,})$/);
+		if (defMatch) {
+			flashcards.push({
+				front: `O que é ${defMatch[1].trim()}?`,
+				back: defMatch[2].trim()
+			});
+			continue;
+		}
+
+		if (line.length > 40 && line.length < 200) {
+			flashcards.push({
+				front: `Complete: "${line.substring(0, Math.floor(line.length / 2))}..."`,
+				back: line
+			});
+		}
+
+		if (flashcards.length >= 5) break;
+	}
+
+	if (flashcards.length === 0) {
+		flashcards.push({
+			front: 'Resumo da anotação',
+			back: note.substring(0, 200).trim() + (note.length > 200 ? '...' : '')
+		});
+	}
+
+	return flashcards;
+}
