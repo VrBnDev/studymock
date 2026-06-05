@@ -3,18 +3,7 @@
 	import { extractTextFromPDF } from '$lib/services/pdf';
 	import { gemini } from '$lib/services/gemini';
 	import type { Question, PDFDocument } from '$lib/types';
-	import { 
-		FileUp, 
-		Loader2, 
-		CheckCircle, 
-		AlertCircle, 
-		Trash2, 
-		Plus, 
-		Sparkles,
-		Check,
-		Edit3,
-		ChevronRight
-	} from 'lucide-svelte';
+	import { FileUp, LoaderCircle, CircleAlert, Trash2, Plus, Sparkles, Check } from 'lucide-svelte';
 
 	// Page states
 	// 'idle' | 'reading' | 'structuring' | 'reviewing' | 'error'
@@ -161,6 +150,7 @@
 			db.addQuestion(fullQuestion);
 		});
 
+		
 		// Reset page and redirect
 		status = 'idle';
 		tempQuestions = [];
@@ -234,7 +224,7 @@
 	{#if status === 'reading' || status === 'structuring'}
 		<!-- Processing pipeline spinner -->
 		<div class="glass-panel rounded-3xl p-8 flex flex-col items-center justify-center text-center min-h-[300px]">
-			<Loader2 class="h-10 w-10 text-indigo-500 animate-spin mb-4" />
+			<LoaderCircle class="h-10 w-10 text-indigo-500 animate-spin mb-4" />
 			
 			{#if status === 'reading'}
 				<h3 class="text-lg font-semibold text-slate-200">Lendo e extraindo PDF...</h3>
@@ -264,7 +254,7 @@
 		<!-- Error state -->
 		<div class="glass-panel rounded-3xl p-8 flex flex-col items-center justify-center text-center min-h-[300px] border-red-500/10">
 			<div class="h-12 w-12 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 mb-4">
-				<AlertCircle class="h-6 w-6" />
+				<CircleAlert class="h-6 w-6" />
 			</div>
 			
 			<h3 class="text-lg font-semibold text-slate-200">Falha ao processar PDF</h3>
@@ -293,16 +283,10 @@
 					<p class="text-xs text-slate-500">Revise os textos, disciplinas e configure o gabarito oficial antes de cadastrar no banco.</p>
 				</div>
 				<div class="flex gap-3">
-					<button 
-						onclick={() => { status = 'idle'; tempQuestions = []; }}
-						class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
-					>
+					<button onclick={() => { status = 'idle'; tempQuestions = []; }} class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors">
 						Descartar
 					</button>
-					<button 
-						onclick={confirmImport}
-						class="px-5 py-2.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-lg shadow-indigo-600/15"
-					>
+					<button onclick={confirmImport} class="px-5 py-2.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-lg shadow-indigo-600/15">
 						Confirmar e Importar Banco
 					</button>
 				</div>
@@ -316,11 +300,7 @@
 						<!-- Header index & Delete button -->
 						<div class="flex items-center justify-between mb-4 border-b border-slate-900 pb-3">
 							<span class="text-xs text-slate-500 font-bold uppercase tracking-wider">Questão #{qIdx + 1}</span>
-							<button 
-								onclick={() => removeQuestion(qIdx)} 
-								class="text-red-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-all"
-								title="Descartar Questão"
-							>
+							<button onclick={() => removeQuestion(qIdx)} class="text-red-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-all" title="Descartar Questão">
 								<Trash2 class="h-4.5 w-4.5" />
 							</button>
 						</div>
@@ -376,13 +356,9 @@
 							{#if q.alternatives}
 								{#each q.alternatives as alt, altIdx}
 									<div class="flex items-center gap-3">
-										<button 
-											onclick={() => setCorrectAlternative(qIdx, alt.id)}
+										<button onclick={() => setCorrectAlternative(qIdx, alt.id)}
 											class="h-5 w-5 rounded-full border flex items-center justify-center shrink-0 transition-all
-											{alt.isCorrect 
-												? 'bg-indigo-600 border-indigo-500 text-white' 
-												: 'border-slate-800 hover:border-slate-700 bg-slate-950 text-transparent'}"
-										>
+											{alt.isCorrect ? 'bg-indigo-600 border-indigo-500 text-white' : 'border-slate-800 hover:border-slate-700 bg-slate-950 text-transparent'}">
 											<Check class="h-3 w-3" />
 										</button>
 										
@@ -431,16 +407,10 @@
 
 			<!-- Floating Confirm Actions -->
 			<div class="flex items-center justify-end gap-4 bg-slate-900/20 p-4 rounded-2xl border border-slate-900 mt-6">
-				<button 
-					onclick={() => { status = 'idle'; tempQuestions = []; }}
-					class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
-				>
+				<button onclick={() => { status = 'idle'; tempQuestions = []; }} class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors">
 					Descartar Tudo
 				</button>
-				<button 
-					onclick={confirmImport}
-					class="px-6 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-lg shadow-indigo-600/15"
-				>
+				<button onclick={confirmImport} class="px-6 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-lg shadow-indigo-600/15">
 					Confirmar e Importar {tempQuestions.length} Questões
 				</button>
 			</div>

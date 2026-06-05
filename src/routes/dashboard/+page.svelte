@@ -2,17 +2,7 @@
 	import { onMount } from 'svelte';
 	import { db } from '$lib/services/db';
 	import type { PerformanceStats } from '$lib/types';
-	import { 
-		TrendingUp, 
-		CheckCircle2, 
-		XCircle, 
-		Clock, 
-		BookOpen, 
-		AlertTriangle, 
-		Sparkles,
-		Flame,
-		ArrowRight
-	} from 'lucide-svelte';
+	import { TrendingUp, Clock, BookOpen, AlertTriangle, Sparkles, Flame, ArrowRight, CircleCheck, CircleX } from 'lucide-svelte';
 
 	let stats = $state<PerformanceStats>({
 		totalAnswered: 0,
@@ -158,7 +148,7 @@
 	<!-- Welcome Banner -->
 	<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
 		<div>
-			<h1 class="text-3xl font-display font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+			<h1 class="text-3xl font-display font-extrabold tracking-tight bg-linear-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
 				Bons estudos, Vitória!
 			</h1>
 			<p class="text-slate-400 text-sm mt-1">
@@ -199,7 +189,7 @@
 
 			<div class="glass-panel rounded-3xl p-5 flex items-center gap-4 transition-all duration-200 hover:border-slate-800/80">
 				<div class="h-12 w-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-					<CheckCircle2 class="h-6 w-6" />
+					<CircleCheck class="h-6 w-6" />
 				</div>
 				<div>
 					<span class="text-xs text-slate-500 font-semibold uppercase tracking-wider">Taxa de Acerto</span>
@@ -209,7 +199,7 @@
 
 			<div class="glass-panel rounded-3xl p-5 flex items-center gap-4 transition-all duration-200 hover:border-slate-800/80">
 				<div class="h-12 w-12 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-400">
-					<XCircle class="h-6 w-6" />
+					<CircleX class="h-6 w-6" />
 				</div>
 				<div>
 					<span class="text-xs text-slate-500 font-semibold uppercase tracking-wider">Erros Registrados</span>
@@ -402,7 +392,7 @@
 							</div>
 						{:else if stats.totalAnswered > 0}
 							<div class="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 flex items-start gap-3">
-								<CheckCircle2 class="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+								<CircleCheck class="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
 								<div>
 									<h4 class="text-sm font-semibold text-emerald-400">Excelente Desempenho!</h4>
 									<p class="text-xs text-slate-400 mt-1 leading-relaxed">

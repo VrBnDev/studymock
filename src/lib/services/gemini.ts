@@ -10,8 +10,13 @@ import type { Question, PerformanceStats } from '../types';
 // ---------------------------------------------------------------------------
 
 interface Alternative {
+	id: string;
 	text: string;
 	isCorrect: boolean;
+}
+
+function makeAltId() {
+	return `alt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -19,7 +24,7 @@ interface Alternative {
 // ---------------------------------------------------------------------------
 
 async function callGemini(prompt: string, apiKey: string, jsonMode = false): Promise<string> {
-	const model = 'gemini-1.5-flash';
+	const model = 'gemini-2.5-flash';
 	const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
 	const response = await fetch(url, {
@@ -205,6 +210,7 @@ function heuristicParser(text: string): Partial<Question>[] {
 
 				if (text.length > 0) {
 					alternatives.push({
+						id: makeAltId(),
 						text,
 						isCorrect: false
 					});
@@ -331,7 +337,19 @@ ${text}`;
 		try {
 			const jsonText = await callGemini(prompt, apiKey, true);
 			const parsed = JSON.parse(jsonText);
-			if (parsed.questions?.length > 0) return parsed.questions;
+			if (parsed.questions?.length > 0) {
+				// Garantir que cada alternativa tenha um `id` (pode faltar no JSON retornado pela IA)
+				parsed.questions.forEach((q: any) => {
+					if (Array.isArray(q.alternatives)) {
+						q.alternatives = q.alternatives.map((a: any) => ({
+							id: a.id || makeAltId(),
+							text: a.text || '',
+							isCorrect: !!a.isCorrect
+						}));
+					}
+				});
+				return parsed.questions;
+			}
 			return heuristicParser(text);
 		} catch {
 			return heuristicParser(text);
