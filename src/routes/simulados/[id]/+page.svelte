@@ -1,27 +1,27 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { db } from '$lib/services/db';
 	import { gemini } from '$lib/services/gemini';
 	import type { Quiz, Question, StudyNote } from '$lib/types';
 	import { 
 		Clock, 
-		CheckCircle2, 
-		XCircle, 
+		CircleCheck, 
+		CircleX, 
 		ArrowLeft, 
 		ArrowRight, 
 		Flag, 
-		GraduationCap, 
 		Sparkles, 
 		Bot, 
 		Check,
 		Save,
 		Layers,
-		AlertCircle
+		CircleAlert,
+		LoaderCircle
 	} from 'lucide-svelte';
 
 	// Router params
-	const quizId = $page.params.id;
+	const quizId = page.params.id;
 
 	// Database state
 	let quiz = $state<Quiz | null>(null);
@@ -237,12 +237,12 @@
 
 {#if loading}
 	<div class="h-64 flex items-center justify-center">
-		<Loader2 class="h-8 w-8 text-indigo-500 animate-spin" />
+		<LoaderCircle class="h-8 w-8 text-indigo-500 animate-spin" />
 	</div>
 {:else}
 	{#if !quiz}
 		<div class="glass-panel rounded-3xl p-8 text-center border-red-500/10">
-			<AlertCircle class="h-8 w-8 text-red-500 mx-auto mb-3" />
+			<CircleAlert class="h-8 w-8 text-red-500 mx-auto mb-3" />
 			<h3 class="text-lg font-semibold text-slate-200">Simulado não encontrado</h3>
 			<p class="text-xs text-slate-500 mt-1">Este simulado pode ter sido removido ou não existe.</p>
 			<a href="/simulados" class="inline-flex items-center gap-2 mt-4 text-xs font-semibold text-indigo-400 hover:underline">
@@ -569,10 +569,10 @@
 											: 'bg-red-500/5 text-red-400 border border-red-500/10'}"
 									>
 										{#if isCorrect}
-											<CheckCircle2 class="h-3.5 w-3.5" />
+											<CircleCheck class="h-3.5 w-3.5" />
 											<span>Acertou</span>
 										{:else}
-											<XCircle class="h-3.5 w-3.5" />
+											<CircleX class="h-3.5 w-3.5" />
 											<span>Errou</span>
 										{/if}
 									</div>
@@ -646,7 +646,7 @@
 										onclick={() => tutorResponse = ''}
 										class="text-slate-500 hover:text-slate-200"
 									>
-										<XCircle class="h-5 w-5" />
+										<CircleX class="h-5 w-5" />
 									</button>
 								</div>
 

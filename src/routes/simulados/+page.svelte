@@ -160,7 +160,7 @@
 
 				<!-- Quantity Selector -->
 				<div class="flex flex-col md:col-span-2">
-					<label class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Quantidade de Questões</label>
+					<p class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Quantidade de Questões</p>
 					<div class="grid grid-cols-5 gap-3">
 						{#each [5, 10, 20, 30, 50] as qty}
 							<button 
