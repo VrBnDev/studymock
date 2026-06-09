@@ -3,9 +3,7 @@
  * Extract text from PDF files entirely on the client side using pdfjs-dist.
  */
 
-export async function extractTextFromPDF(
-	file: File,
-	onProgress?: (current: number, total: number) => void
+export async function extractTextFromPDF(file: File, onProgress?: (current: number, total: number) => void
 ): Promise<string> {
 	if (typeof window === 'undefined') {
 		return '';

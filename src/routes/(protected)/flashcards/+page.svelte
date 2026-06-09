@@ -2,19 +2,7 @@
 	import { onMount } from 'svelte';
 	import { db } from '$lib/services/db';
 	import type { Flashcard } from '$lib/types';
-	import { 
-		Layers, 
-		Plus, 
-		Check, 
-		RotateCw, 
-		ChevronRight, 
-		BookOpen, 
-		Calendar, 
-		Clock, 
-		Award,
-		Trash2,
-		X
-	} from 'lucide-svelte';
+	import { Layers, Plus, Check, RotateCw, ChevronRight, Award, Trash2 } from 'lucide-svelte';
 
 	let flashcards = $state<Flashcard[]>([]);
 	
@@ -34,8 +22,8 @@
 		loadCards();
 	});
 
-	function loadCards() {
-		flashcards = db.getFlashcards();
+	async function loadCards() {
+		flashcards = await db.getFlashcards();
 	}
 
 	// Decks calculation
@@ -78,7 +66,7 @@
 	});
 
 	// SuperMemo-2 (SM-2) algorithm execution
-	function rateCard(grade: number) {
+	async function rateCard(grade: number) {
 		const card = activeCard;
 		if (!card) return;
 
@@ -117,18 +105,18 @@
 			nextReview: nextReviewDate.toISOString()
 		};
 
-		db.saveFlashcard(updatedCard);
+		await db.saveFlashcard(updatedCard);
 		
 		// Move to next card after brief timeout for visual flip reset
 		isFlipped = false;
-		setTimeout(() => {
+		setTimeout(async () => {
 			currentQueueIdx++;
-			loadCards();
+			await loadCards();
 		}, 300);
 	}
 
 	// Create new card manually
-	function handleCreateCard(e: Event) {
+	async function handleCreateCard(e: Event) {
 		e.preventDefault();
 		if (!newFront.trim() || !newBack.trim()) {
 			alert('Por favor, preencha frente e verso do flashcard.');
@@ -136,7 +124,6 @@
 		}
 
 		const newCard: Flashcard = {
-			id: `card_manual_${Date.now()}`,
 			front: newFront,
 			back: newBack,
 			subject: newSubject,
@@ -148,20 +135,32 @@
 			createdAt: new Date().toISOString()
 		};
 
-		db.saveFlashcard(newCard);
-		loadCards();
+		try {
+			await db.saveFlashcard(newCard);
+			await loadCards();
 
-		// reset
-		newFront = '';
-		newBack = '';
-		isCreateOpen = false;
+			// reset
+			newFront = '';
+			newBack = '';
+			isCreateOpen = false;
+			alert('Flashcard criado com sucesso!');
+		} catch (error) {
+			console.error('Error creating flashcard:', error);
+			alert('Erro ao criar o flashcard.');
+		}
 	}
 
-	function deleteCard(id: string, e: Event) {
+	async function deleteCard(id: string, e: Event) {
 		e.stopPropagation();
 		if (confirm('Deseja excluir este flashcard permanentemente?')) {
-			db.deleteFlashcard(id);
-			loadCards();
+			try {
+				await db.deleteFlashcard(id);
+				await loadCards();
+				alert('Flashcard excluído com sucesso!');
+			} catch (error) {
+				console.error('Error deleting flashcard:', error);
+				alert('Erro ao excluir o flashcard.');
+			}
 		}
 	}
 
@@ -190,10 +189,7 @@
 				</p>
 			</div>
 
-			<button 
-				onclick={() => isCreateOpen = !isCreateOpen}
-				class="flex items-center gap-2 px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/15"
-			>
+			<button onclick={() => isCreateOpen = !isCreateOpen} class="flex items-center gap-2 px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/15">
 				<Plus class="h-4.5 w-4.5" />
 				<span>Criar Flashcard</span>
 			</button>

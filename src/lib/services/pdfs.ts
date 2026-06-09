@@ -14,23 +14,27 @@ export const pdfService = {
 	},
 
 	async create(pdf: any) {
-		const { error } = await supabase
+		const { data, error } = await supabase
 			.from('pdfs')
-			insert(pdf);
+			.insert(pdf)
+			.select()
+			.single();
 
 		if (error) throw error;
+
+		return data;
 	},
 
 	async updateStatus(
 		id: string,
 		status: string,
-		questionsCount = 0
+		questions_count = 0
 	) {
 		const { error } = await supabase
 			.from('pdfs')
 			.update({
 				status,
-				questions_count: questionsCount
+				questions_count: questions_count
 			})
 			.eq('id', id);
 

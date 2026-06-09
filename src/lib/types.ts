@@ -5,8 +5,9 @@ export interface Alternative {
 }
 
 export interface Question {
-	id: string;
+	id?: string;
 	pdfId?: string;
+	userId?: string;
 	statement: string;
 	alternatives: Alternative[];
 	difficulty: 'Fácil' | 'Média' | 'Difícil';
@@ -15,27 +16,35 @@ export interface Question {
 	year?: number;
 	source?: string;
 	explanation?: string;
-	createdAt: string;
+	created_at: string;
 }
 
 export interface PDFDocument {
 	id: string;
+	userId?: string;
 	filename: string;
 	url?: string;
-	createdAt: string;
-	status: 'processing' | 'completed' | 'error';
-	questionsCount: number;
+	created_at: string;
+	status:
+		| 'processing'
+		| 'completed'
+		| 'error';
+	questions_count: number;
 }
 
 export interface Quiz {
 	id: string;
+	userId: string;
 	title: string;
-	createdAt: string;
-	questions: Question[];
-	answers: Record<string, string>; // questionId -> alternativeId
-	score?: number; // percentage, e.g. 84
-	timeTaken?: number; // in seconds
+	created_at: string;
 	completedAt?: string;
+	questions?: Question[];
+	answers?: Record<string, string>; // questionId -> alternativeId
+	score?: number; // in percentage or points
+	timeTaken?: number; // in seconds
+	totalQuestions: number;
+	correctAnswers: number;
+	wrongAnswers: number;
 	status: 'in-progress' | 'completed';
 }
 
@@ -52,12 +61,12 @@ export interface StudyNote {
 	id: string;
 	questionId?: string; // Linked question, if any
 	content: string;
-	createdAt: string;
+	created_at: string;
 	title?: string;
 }
 
 export interface Flashcard {
-	id: string;
+	id?: string;
 	front: string;
 	back: string;
 	subject: string;
@@ -66,7 +75,7 @@ export interface Flashcard {
 	repetition: number; // number of consecutive correct answers
 	efactor: number; // easiness factor (default 2.5)
 	nextReview: string; // ISO string date
-	createdAt: string;
+	created_at: string;
 }
 
 export interface PerformanceStats {
@@ -82,3 +91,4 @@ export interface PerformanceStats {
 export interface GeminiConfig {
 	apiKey: string;
 }
+
