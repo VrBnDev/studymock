@@ -26,9 +26,9 @@
 		loadData();
 	});
 
-	function loadData() {
-		questions = db.getQuestions();
-		quizzes = db.getQuizzes();
+	async function loadData() {
+		questions = await db.getQuestions();
+		quizzes = await db.getQuizzes();
 	}
 
 	const subjects = $derived([...new Set(questions.map(q => q.subject))]);
@@ -46,7 +46,7 @@
 	}
 
 	// Generate and save quiz
-	function generateQuiz() {
+	async function generateQuiz() {
 		if (questions.length === 0) {
 			alert('Seu banco de questões está vazio. Adicione questões manualmente ou importe um PDF antes de iniciar.');
 			return;
@@ -73,25 +73,39 @@
 		
 		const newQuiz: Quiz = {
 			id: quizId,
+			userId: db.getCurrentUserId() || '',
 			title: `Simulado de ${subjectTitle}`,
 			createdAt: new Date().toISOString(),
 			questions: selectedQuestions,
-			answers: {},
-			status: 'in-progress'
+		
+answers: {},
+			status: 'in-progress',
+			totalQuestions: selectedQuestions.length,
+			correctAnswers: 0,
+			wrongAnswers: 0
 		};
 
-		db.saveQuiz(newQuiz);
-		
-		// Redirect to active quiz
-		window.location.href = `/simulados/${quizId}`;
+		try {
+			await db.saveQuiz(newQuiz);
+			// Redirect to active quiz
+			window.location.href = `/simulados/${quizId}`;
+		} catch (error) {
+			console.error('Error creating quiz:', error);
+			alert('Erro ao criar o simulado.');
+		}
 	}
 
-	function deleteQuizHistory(id: string, e: Event) {
+	async function deleteQuizHistory(id: string, e: Event) {
 		e.stopPropagation();
 		if (confirm('Tem certeza que deseja excluir o histórico deste simulado?')) {
-			const filtered = quizzes.filter(q => q.id !== id);
-			db.saveQuizzes(filtered);
-			loadData();
+			try {
+				await db.deleteQuiz(id);
+				await loadData();
+				alert('Simulado excluído com sucesso!');
+			} catch (error) {
+				console.error('Error deleting quiz:', error);
+				alert('Erro ao excluir o simulado.');
+			}
 		}
 	}
 
@@ -250,7 +264,7 @@
 							<div>
 								<h4 class="text-sm font-bold text-slate-200 group-hover:text-indigo-400 transition-colors">{quiz.title}</h4>
 								<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-500 text-[10px] font-medium uppercase mt-1">
-									<span>{new Date(quiz.createdAt).toLocaleDateString()}</span>
+									<span>{new Date(quiz.created_at).toLocaleDateString()}</span>
 									<span>•</span>
 									<span class="flex items-center gap-1"><BookOpen class="h-3 w-3" /> {quiz.questions.length} questões</span>
 									<span>•</span>

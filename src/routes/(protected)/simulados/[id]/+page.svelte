@@ -50,15 +50,15 @@
 		if (timerInterval) clearInterval(timerInterval);
 	});
 
-	function loadQuiz() {
-		const found = db.getQuizById(quizId);
+	async function loadQuiz() {
+		const found = await db.getQuizById(quizId);
 		if (!found) {
 			loading = false;
 			return;
 		}
 
 		quiz = found;
-		selectedAnswers = { ...found.answers };
+		selectedAnswers = { ...(found.answers || {}) };
 		
 		if (found.status === 'completed') {
 			activeTab = 'results';
@@ -70,8 +70,8 @@
 			startTimer();
 			
 			// Load notes for quiz questions
-			const allNotes = db.getNotes();
-			found.questions.forEach(q => {
+			const allNotes = await db.getNotes();
+			found.questions?.forEach(q => {
 				const n = allNotes.find(note => note.questionId === q.id);
 				if (n) {
 					questionNotes[q.id] = n.content;
@@ -114,9 +114,9 @@
 	}
 
 	// Save question note during exam
-	function saveNote(questionId: string) {
+	async function saveNote(questionId: string) {
 		const content = questionNotes[questionId] || '';
-		const allNotes = db.getNotes();
+		const allNotes = await db.getNotes();
 		const existingNote = allNotes.find(n => n.questionId === questionId);
 
 		const newNote: StudyNote = {
@@ -127,15 +127,20 @@
 			createdAt: new Date().toISOString()
 		};
 
-		db.saveNote(newNote);
-		alert('Anotação de estudos salva!');
+		try {
+			await db.saveNote(newNote);
+			alert('Anotação de estudos salva!');
+		} catch (error) {
+			console.error('Error saving note:', error);
+			alert('Erro ao salvar a anotação.');
+		}
 	}
 
 	// Submit quiz and calculate results
-	function submitQuiz() {
+	async function submitQuiz() {
 		if (!quiz) return;
 		
-		const unansweredCount = quiz.questions.filter(q => !selectedAnswers[q.id]).length;
+		const unansweredCount = quiz.questions?.filter(q => !selectedAnswers[q.id]).length || 0;
 		
 		if (unansweredCount > 0) {
 			if (!confirm(`Você ainda possui ${unansweredCount} questões sem responder. Deseja finalizar mesmo assim?`)) {
@@ -151,7 +156,7 @@
 
 		// Calculate grade
 		let correctCount = 0;
-		quiz.questions.forEach(q => {
+		quiz.questions?.forEach(q => {
 			const chosenId = selectedAnswers[q.id];
 			const correctAlt = q.alternatives.find(a => a.isCorrect);
 			if (chosenId && correctAlt && chosenId === correctAlt.id) {
@@ -159,7 +164,7 @@
 			}
 		});
 
-		const score = Math.round((correctCount / quiz.questions.length) * 100);
+		const score = Math.round((correctCount / (quiz.questions?.length || 1)) * 100);
 
 		// Save completed quiz state
 		const updatedQuiz: Quiz = {
@@ -168,16 +173,23 @@
 			answers: selectedAnswers,
 			score,
 			timeTaken: elapsedSeconds,
-			completedAt: new Date().toISOString()
+			completedAt: new Date().toISOString(),
+			correctAnswers: correctCount,
+			wrongAnswers: (quiz.questions?.length || 0) - correctCount
 		};
 
-		db.saveQuiz(updatedQuiz);
-		quiz = updatedQuiz;
-		activeTab = 'results';
+		try {
+			await db.saveQuiz(updatedQuiz);
+			quiz = updatedQuiz;
+			activeTab = 'results';
+		} catch (error) {
+			console.error('Error submitting quiz:', error);
+			alert('Erro ao salvar o simulado.');
+		}
 	}
 
 	// Flashcard Creator from completed exam
-	function generateFlashcard(q: Question) {
+	async function generateFlashcard(q: Question) {
 		const correctAlt = q.alternatives.find(a => a.isCorrect);
 		const card = {
 			id: `card_from_quiz_${Date.now()}`,
@@ -191,8 +203,13 @@
 			nextReview: new Date().toISOString(),
 			createdAt: new Date().toISOString()
 		};
-		db.saveFlashcard(card);
-		alert('Flashcard criado com sucesso para este assunto!');
+		try {
+			await db.saveFlashcard(card);
+			alert('Flashcard criado com sucesso para este assunto!');
+		} catch (error) {
+			console.error('Error creating flashcard:', error);
+			alert('Erro ao criar o flashcard.');
+		}
 	}
 
 	// Call AI tutor sidebar for question clarification

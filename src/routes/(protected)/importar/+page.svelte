@@ -118,43 +118,43 @@
 	}
 
 	// Confirm final import
-	function confirmImport() {
+	async function confirmImport() {
 		if (tempQuestions.length === 0) return;
 
-		// Add PDF entry to historical list
-		const pdfId = `pdf_${Date.now()}`;
-		const newPDF: PDFDocument = {
-			id: pdfId,
-			filename: fileName,
-			createdAt: new Date().toISOString(),
-			status: 'completed',
-			questionsCount: tempQuestions.length
-		};
-		db.addPDF(newPDF);
+		try {
+			// Salvar PDF
+			const pdf = await db.savePDF({
+				filename: fileName,
+				status: 'completed',
+				questions_count: tempQuestions.length
+			});
 
-		// Format and add questions to the database
-		tempQuestions.forEach((q, idx) => {
-			const fullQuestion: Question = {
-				id: `q_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
-				pdfId: pdfId,
-				statement: q.statement || 'Enunciado vazio',
-				alternatives: q.alternatives || [],
-				difficulty: q.difficulty || 'Média',
-				subject: q.subject || 'Geral',
-				topic: q.topic || 'Importado',
-				year: q.year || new Date().getFullYear(),
-				source: q.source || 'PDF Importado',
-				explanation: q.explanation || '',
-				createdAt: new Date().toISOString()
-			};
-			db.addQuestion(fullQuestion);
-		});
+			// Salvar questões
+			for (const q of tempQuestions) {
+				const fullQuestion: Question = {
+					statement: q.statement || 'Enunciado vazio',
+					alternatives: q.alternatives || [],
+					difficulty: q.difficulty || 'Média',
+					subject: q.subject || 'Geral',
+					topic: q.topic || 'Importado',
+					year: q.year || new Date().getFullYear(),
+					source: q.source || 'PDF Importado',
+					explanation: q.explanation || '',
+					created_at: new Date().toISOString(),
+				};
 
-		
-		// Reset page and redirect
-		status = 'idle';
-		tempQuestions = [];
-		window.location.href = '/questoes';
+				await db.saveQuestion(fullQuestion);
+			}
+
+			status = 'idle';
+			tempQuestions = [];
+
+			window.location.href = '/questoes';
+
+		} catch (error) {
+			console.error('Erro ao importar:', error);
+			alert('Erro ao importar questões.');
+		}
 	}
 </script>
 

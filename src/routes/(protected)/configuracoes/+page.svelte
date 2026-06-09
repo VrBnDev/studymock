@@ -28,15 +28,25 @@
 		loadSettings();
 	});
 
-	function loadSettings() {
+	async function loadSettings() {
 		apiKey = db.getGeminiApiKey();
 		
 		// Load counts
-		questionCount = db.getQuestions().length;
-		pdfCount = db.getPDFs().length;
-		quizCount = db.getQuizzes().length;
-		noteCount = db.getNotes().length;
-		flashcardCount = db.getFlashcards().length;
+		try {
+			const questions = await db.getQuestions();
+			const pdfs = await db.getPDFs();
+			const quizzes = await db.getQuizzes();
+			const notes = await db.getNotes();
+			const flashcards = await db.getFlashcards();
+			
+			questionCount = questions.length;
+			pdfCount = pdfs.length;
+			quizCount = quizzes.length;
+			noteCount = notes.length;
+			flashcardCount = flashcards.length;
+		} catch (error) {
+			console.error('Error loading settings:', error);
+		}
 	}
 
 	function saveApiKey(e: Event) {
@@ -50,7 +60,10 @@
 
 	function resetData() {
 		if (confirm('Atenção: Isso irá apagar todas as suas questões importadas, anotações de estudo, simulados e flashcards criados, e restaurar as configurações padrão de fábrica. Deseja continuar?')) {
-			db.clearAllData();
+			// Clear localStorage
+			if (typeof window !== 'undefined') {
+				localStorage.clear();
+			}
 			loadSettings();
 			alert('Banco de dados redefinido para o estado inicial!');
 			window.location.reload();

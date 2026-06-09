@@ -1,22 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { getQuestions, createQuestion } from '$lib/services/questions';
 	import { db } from '$lib/services/db';
 	import type { Question, StudyNote, Alternative } from '$lib/types';
-	import { 
-		Search, 
-		Plus, 
-		ChevronDown, 
-		ChevronUp, 
-		BookOpen, 
-		Edit3, 
-		Trash2, 
-		CheckCircle2, 
-		HelpCircle,
-		Sparkles,
-		FileText,
-		Save,
-		Layers
-	} from 'lucide-svelte';
+	import { Search, Plus, ChevronDown, ChevronUp, PenLine, Trash2, CircleCheck, CircleQuestionMark, Sparkles, FileText, Save, Layers } from 'lucide-svelte';
 
 	let questions = $state<Question[]>([]);
 	let notes = $state<StudyNote[]>([]);
@@ -46,9 +33,9 @@
 		loadData();
 	});
 
-	function loadData() {
-		questions = db.getQuestions();
-		notes = db.getNotes();
+	async function loadData() {
+		questions = await getQuestions();
+		
 	}
 
 	// Filtered questions
@@ -83,22 +70,27 @@
 	}
 
 	// Save note linked to question
-	function saveQuestionNote(qId: string) {
+	async function saveQuestionNote(qId: string) {
 		const existingNote = notes.find(n => n.questionId === qId);
 		const note: StudyNote = {
 			id: existingNote ? existingNote.id : `note_${Date.now()}`,
 			questionId: qId,
 			title: `Anotação da Questão`,
 			content: activeNoteContent,
-			createdAt: new Date().toISOString()
+			created_at: new Date().toISOString()
 		};
-		db.saveNote(note);
-		loadData();
-		alert('Anotação salva com sucesso!');
+		try {
+			await db.saveNote(note);
+			await loadData();
+			alert('Anotação salva com sucesso!');
+		} catch (error) {
+			console.error('Error saving note:', error);
+			alert('Erro ao salvar a anotação.');
+		}
 	}
 
 	// Create Flashcard from question
-	function createFlashcardFromQuestion(q: Question) {
+	async function createFlashcardFromQuestion(q: Question) {
 		const correctAlt = q.alternatives.find(a => a.isCorrect);
 		const card = {
 			id: `card_from_q_${Date.now()}`,
@@ -110,23 +102,33 @@
 			repetition: 0,
 			efactor: 2.5,
 			nextReview: new Date().toISOString(),
-			createdAt: new Date().toISOString()
+			created_at: new Date().toISOString()
 		};
-		db.saveFlashcard(card);
-		alert('Flashcard criado com sucesso! Ele estará disponível na tela de Flashcards.');
+		try {
+			await db.saveFlashcard(card);
+			alert('Flashcard criado com sucesso! Ele estará disponível na tela de Flashcards.');
+		} catch (error) {
+			console.error('Error creating flashcard:', error);
+			alert('Erro ao criar o flashcard.');
+		}
 	}
 
 	// Delete question
-	function deleteQuestion(id: string) {
+	async function deleteQuestion(id: string) {
 		if (confirm('Tem certeza que deseja excluir esta questão permanentemente?')) {
-			const filtered = questions.filter(q => q.id !== id);
-			db.saveQuestions(filtered);
-			loadData();
+			try {
+				await db.deleteQuestion(id);
+				await loadData();
+				alert('Questão excluída com sucesso!');
+			} catch (error) {
+				console.error('Error deleting question:', error);
+				alert('Erro ao excluir a questão.');
+			}
 		}
 	}
 
 	// Register manual question
-	function handleCreateManual(e: Event) {
+	async function handleCreateManual(e: Event) {
 		e.preventDefault();
 
 		if (!newStatement.trim() || newAlternatives.some(alt => !alt.trim())) {
@@ -150,19 +152,26 @@
 			year: new Date().getFullYear(),
 			source: 'Cadastro Manual',
 			explanation: newExplanation,
-			createdAt: new Date().toISOString()
+			created_at: new Date().toISOString()
 		};
 
-		db.addQuestion(manualQuestion);
-		loadData();
+		try {
+			await db.saveQuestion(manualQuestion);
+			loadData();
 
-		// Reset form
-		newStatement = '';
-		newTopic = '';
-		newAlternatives = ['', '', '', ''];
-		correctAltIdx = 0;
-		newExplanation = '';
-		isCreateManualOpen = false;
+			// Reset form
+			newStatement = '';
+			newTopic = '';
+			newAlternatives = ['', '', '', ''];
+			correctAltIdx = 0;
+			newExplanation = '';
+			isCreateManualOpen = false;
+
+			alert('Questão criada com sucesso!');
+		} catch (error) {
+			console.error('Error creating question:', error);
+			alert('Erro ao criar a questão. Verifique o console para mais detalhes.');
+		}
 	}
 </script>
 
@@ -429,9 +438,9 @@
 									>
 										<div class="mt-0.5 shrink-0">
 											{#if alt.isCorrect}
-												<CheckCircle2 class="h-4.5 w-4.5 text-emerald-500" />
+												<CircleCheck class="h-4.5 w-4.5 text-emerald-500" />
 											{:else}
-												<HelpCircle class="h-4.5 w-4.5 text-slate-700" />
+												<CircleQuestionMark class="h-4.5 w-4.5 text-slate-700" />
 											{/if}
 										</div>
 										<span class={alt.isCorrect ? 'font-medium' : ''}>{alt.text}</span>
@@ -455,7 +464,7 @@
 							<!-- Connected Study Note -->
 							<div class="space-y-2">
 								<label for="active-note" class="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
-									<Edit3 class="h-3.5 w-3.5" />
+									<PenLine class="h-3.5 w-3.5" />
 									<span>Anotações Vinculadas a esta questão</span>
 								</label>
 								<div class="flex gap-2">
